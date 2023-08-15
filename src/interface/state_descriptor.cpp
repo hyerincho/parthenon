@@ -489,9 +489,7 @@ StateDescriptor::GetVariableNames(const std::vector<std::string> &req_names,
       auto &name = p.first;
       auto &pool = p.second;
       auto &meta = pool.shared_metadata();
-      printf("checking %s\n", name.c_str());
       if (MetadataUtils::MatchFlags(flags, meta)) {
-        printf("matched flag\n");
         for (const auto &s : pool.pool()) {
           if (sparse_ids_set.empty() || sparse_ids_set.count(s.first) > 0) {
             if (names.count(MakeVarLabel(name, s.first)) == 0)
