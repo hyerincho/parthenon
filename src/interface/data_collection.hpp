@@ -38,10 +38,15 @@ class DataCollection {
 
   void SetMeshPointer(Mesh *pmesh) { pmy_mesh_ = pmesh; }
 
-  std::shared_ptr<T> Add(const std::string &label, const std::shared_ptr<T> &src,
-                         const std::vector<std::string> &flags);
-  std::shared_ptr<T> Add(const std::string &label, const std::shared_ptr<T> &src);
-  std::shared_ptr<T> Add(const std::string &label) {
+  std::shared_ptr<T> &Add(const std::string &label, const std::shared_ptr<T> &src,
+                          const std::vector<std::string> &flags, const bool shallow);
+  std::shared_ptr<T> &Add(const std::string &label, const std::shared_ptr<T> &src,
+                          const std::vector<std::string> &flags);
+  std::shared_ptr<T> &AddShallow(const std::string &label, const std::shared_ptr<T> &src,
+                                 const std::vector<std::string> &flags);
+  std::shared_ptr<T> &Add(const std::string &label, const std::shared_ptr<T> &src);
+  std::shared_ptr<T> &AddShallow(const std::string &label, const std::shared_ptr<T> &src);
+  std::shared_ptr<T> &Add(const std::string &label) {
     // error check for duplicate names
     auto it = containers_.find(label);
     if (it != containers_.end()) {
@@ -63,6 +68,8 @@ class DataCollection {
     }
     return it->second;
   }
+
+  void Set(const std::string &name, std::shared_ptr<T> &d) { containers_[name] = d; }
 
   std::shared_ptr<T> &GetOrAdd(const std::string &mbd_label, const int &partition_id);
 
