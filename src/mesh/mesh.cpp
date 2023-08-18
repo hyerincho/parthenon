@@ -519,15 +519,9 @@ Mesh::Mesh(ParameterInput *pin, ApplicationInput *app_in, RestartReader &rr,
       // private members:
       num_mesh_threads_(pin->GetOrAddInteger("parthenon/mesh", "num_threads", 1)),
       tree(this), use_uniform_meshgen_fn_{true, true, true, true}, lb_flag_(true),
-<<<<<<< HEAD
       lb_automatic_(), lb_manual_(), MeshGenerator_{nullptr, UniformMeshGenerator<X1DIR>,
                                                     UniformMeshGenerator<X2DIR>,
                                                     UniformMeshGenerator<X3DIR>},
-=======
-      lb_automatic_(), lb_manual_(),
-      MeshGenerator_{nullptr, UniformMeshGeneratorX1, UniformMeshGeneratorX2,
-                     UniformMeshGeneratorX3},
->>>>>>> 94984ece16ada0fff7cb6243225a29651a281574
       MeshBndryFnctn{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr} {
   std::stringstream msg;
   RegionSize block_size;
