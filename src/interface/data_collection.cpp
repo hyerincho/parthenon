@@ -49,16 +49,27 @@ DataCollection<T>::Add(const std::string &name, const std::shared_ptr<T> &src,
   return containers_[name];
 }
 template <typename T>
-std::shared_ptr<T> &DataCollection<T>::Add(const std::string &label,
-                                           const std::shared_ptr<T> &src,
-                                           const std::vector<std::string> &flags) {
-  return Add(label, src, flags, false);
+std::shared_ptr<T> &DataCollection<T>::Add(const std::string &name,
+                                           const std::string src_name,
+                                           const std::vector<std::string> &field_names) {
+  return Add(name, containers_[src_name], field_names, false);
 }
 template <typename T>
-std::shared_ptr<T> &DataCollection<T>::AddShallow(const std::string &label,
-                                                  const std::shared_ptr<T> &src,
-                                                  const std::vector<std::string> &flags) {
-  return Add(label, src, flags, true);
+std::shared_ptr<T> &
+DataCollection<T>::AddShallow(const std::string &name, const std::string src_name,
+                              const std::vector<std::string> &field_names) {
+  return Add(name, containers_[src_name], field_names, true);
+}
+template <typename T>
+std::shared_ptr<T> &DataCollection<T>::Add(const std::string &name,
+                                           const std::vector<std::string> &field_names) {
+  return Add(name, containers_["base"], field_names, false);
+}
+template <typename T>
+std::shared_ptr<T> &
+DataCollection<T>::AddShallow(const std::string &name,
+                              const std::vector<std::string> &field_names) {
+  return Add(name, containers_["base"], field_names, true);
 }
 
 template <>
