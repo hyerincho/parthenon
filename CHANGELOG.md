@@ -4,6 +4,8 @@
 
 ### Added (new features/APIs/variables/...)
 - [[PR 907]](https://github.com/parthenon-hpc-lab/parthenon/pull/907) PEP1: Allow subclassing StateDescriptor
+- [[PR 932]](https://github.com/parthenon-hpc-lab/parthenon/pull/932) Add GetOrAddFlag to metadata
+- [[PR 931]](https://github.com/parthenon-hpc-lab/parthenon/pull/931) Allow SparsePacks with subsets of blocks
 - [[PR 921]](https://github.com/parthenon-hpc-lab/parthenon/pull/921) Add more flexible ways of adding and using MeshData/MeshBlockData objects to DataCollections
 - [[PR 900]](https://github.com/parthenon-hpc-lab/parthenon/pull/900) Add Morton numbers and expand functionality of LogicalLocation
 - [[PR 902]](https://github.com/parthenon-hpc-lab/parthenon/pull/902) Add ability to output NaNs for de-allocated sparse fields
@@ -24,6 +26,8 @@
 - [[PR 885]](https://github.com/parthenon-hpc-lab/parthenon/pull/885) Expose PackDescriptor and use uids in SparsePacks
 
 ### Fixed (not changing behavior/API/variables/...)
+- [[PR 937]](https://github.com/parthenon-hpc-lab/parthenon/pull/937) Fix multiple line continuations
+- [[PR 933]](https://github.com/parthenon-hpc-lab/parthenon/pull/933) Remove extraneous debug check
 - [[PR 917]](https://github.com/parthenon-hpc-lab/parthenon/pull/917) Update Iterative Tasking Infrastructure
 - [[PR 890]](https://github.com/parthenon-hpc-lab/parthenon/pull/890) Fix bugs in sparse communication and prolongation
 
