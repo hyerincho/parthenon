@@ -442,7 +442,7 @@ class StateDescriptor {
 
   friend std::ostream &operator<<(std::ostream &os, const StateDescriptor &sd);
 
- private:
+ protected:
   void InvertControllerMap();
 
   Params params_;
