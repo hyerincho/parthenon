@@ -212,7 +212,6 @@ add_library(parthenon
   solvers/bicgstab_solver.hpp
   solvers/mg_solver.hpp
   solvers/solver_utils.hpp
-  solvers/solvers.cpp
 
   tasks/task_id.cpp
   tasks/task_id.hpp
