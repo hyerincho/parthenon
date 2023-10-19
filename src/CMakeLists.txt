@@ -210,8 +210,6 @@ add_library(parthenon
   amr_criteria/refinement_package.hpp
 
   solvers/bicgstab_solver.hpp
-  solvers/cg_solver.hpp
-  solvers/newton_krylov.hpp
   solvers/mg_solver.hpp
   solvers/solver_utils.hpp
   solvers/solvers.cpp
