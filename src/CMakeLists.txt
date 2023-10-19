@@ -160,9 +160,11 @@ add_library(parthenon
 
   mesh/amr_loadbalance.cpp
   mesh/domain.hpp
+  mesh/logical_location.cpp
   mesh/logical_location.hpp
   mesh/mesh_refinement.cpp
   mesh/mesh_refinement.hpp
+  mesh/mesh-gmg.cpp
   mesh/mesh.cpp
   mesh/mesh.hpp
   mesh/meshblock.hpp
@@ -210,6 +212,7 @@ add_library(parthenon
   solvers/bicgstab_solver.hpp
   solvers/cg_solver.hpp
   solvers/newton_krylov.hpp
+  solvers/mg_solver.hpp
   solvers/solver_utils.hpp
   solvers/solvers.cpp
 
@@ -226,6 +229,7 @@ add_library(parthenon
   utils/alias_method.cpp
   utils/alias_method.hpp
   utils/array_to_tuple.hpp
+  utils/bit_hacks.hpp
   utils/buffer_utils.cpp
   utils/buffer_utils.hpp
   utils/change_rundir.cpp
