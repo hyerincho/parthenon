@@ -76,6 +76,7 @@
 #include "parameter_input.hpp"
 #include "parthenon_arrays.hpp"
 #include "utils/error_checking.hpp"
+#include "utils/utils.hpp"
 
 namespace parthenon {
 
@@ -146,6 +147,8 @@ Outputs::Outputs(Mesh *pm, ParameterInput *pin, SimTime *tm) {
       // read cartesian mapping option
       op.cartesian_vector = false;
 
+      op.analysis_flag = pin->GetOrAddBoolean(op.block_name, "analysis_output", false);
+
       // read single precision output option
       const bool is_hdf5_output = (op.file_type == "rst") || (op.file_type == "hdf5");
 
@@ -198,7 +201,7 @@ Outputs::Outputs(Mesh *pm, ParameterInput *pin, SimTime *tm) {
 
       // set output variable and optional data format string used in formatted writes
       if ((op.file_type != "hst") && (op.file_type != "rst") &&
-          (op.file_type != "ascent")) {
+          (op.file_type != "ascent") && (op.file_type != "histogram")) {
         op.variables = pin->GetOrAddVector<std::string>(pib->block_name, "variables",
                                                         std::vector<std::string>());
         // JMM: If the requested var isn't present for a given swarm,
@@ -246,6 +249,17 @@ Outputs::Outputs(Mesh *pm, ParameterInput *pin, SimTime *tm) {
         pnew_type = new VTKOutput(op);
       } else if (op.file_type == "ascent") {
         pnew_type = new AscentOutput(op);
+      } else if (op.file_type == "histogram") {
+#ifdef ENABLE_HDF5
+        pnew_type = new HistogramOutput(op, pin);
+#else
+        msg << "### FATAL ERROR in Outputs constructor" << std::endl
+            << "Executable not configured for HDF5 outputs, but HDF5 file format "
+            << "is requested in output/restart block '" << op.block_name << "'. "
+            << "You can disable this block without deleting it by setting a dt < 0."
+            << std::endl;
+        PARTHENON_FAIL(msg);
+#endif // ifdef ENABLE_HDF5
       } else if (is_hdf5_output) {
         const bool restart = (op.file_type == "rst");
         if (restart) {
@@ -409,7 +423,10 @@ void Outputs::MakeOutputs(Mesh *pm, ParameterInput *pin, SimTime *tm,
     if ((tm == nullptr) ||
         ((ptype->output_params.dt >= 0.0) &&
          ((tm->ncycle == 0) || (tm->time >= ptype->output_params.next_time) ||
-          (tm->time >= tm->tlim) || (signal != SignalHandler::OutputSignal::none)))) {
+          (tm->time >= tm->tlim) || (signal == SignalHandler::OutputSignal::now) ||
+          (signal == SignalHandler::OutputSignal::final) ||
+          (signal == SignalHandler::OutputSignal::analysis &&
+           ptype->output_params.analysis_flag)))) {
       if (first && ptype->output_params.file_type != "hst") {
         pm->ApplyUserWorkBeforeOutput(pin);
         first = false;
