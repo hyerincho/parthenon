@@ -416,6 +416,10 @@ class StateDescriptor {
     if (InitNewlyAllocatedVarsBlock != nullptr) return InitNewlyAllocatedVarsBlock(rc);
   }
 
+  void UserWorkBeforeLoop(Mesh *pmesh, ParameterInput *pin, SimTime &tm) const {
+    if (UserWorkBeforeLoopMesh != nullptr) return UserWorkBeforeLoopMesh(pmesh, pin, tm);
+  }
+
   std::vector<std::shared_ptr<AMRCriteria>> amr_criteria;
 
   std::function<void(MeshBlockData<Real> *rc)> PreCommFillDerivedBlock = nullptr;
@@ -426,6 +430,8 @@ class StateDescriptor {
   std::function<void(MeshData<Real> *rc)> PostFillDerivedMesh = nullptr;
   std::function<void(MeshBlockData<Real> *rc)> FillDerivedBlock = nullptr;
   std::function<void(MeshData<Real> *rc)> FillDerivedMesh = nullptr;
+  std::function<void(Mesh *, ParameterInput *, SimTime &)> UserWorkBeforeLoopMesh =
+      nullptr;
 
   std::function<void(SimTime const &simtime, MeshData<Real> *rc)> PreStepDiagnosticsMesh =
       nullptr;
