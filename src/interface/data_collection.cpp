@@ -54,6 +54,12 @@ DataCollection<T>::AddShallow(const std::string &name, const std::string src_nam
   return Add(name, containers_[src_name], field_names, true);
 }
 template <typename T>
+std::shared_ptr<T> &
+DataCollection<T>::AddShallow(const std::string &name, const std::shared_ptr<T> &src,
+                              const std::vector<std::string> &field_names) {
+  return Add(name, src, field_names, true);
+}
+template <typename T>
 std::shared_ptr<T> &DataCollection<T>::Add(const std::string &name,
                                            const std::vector<std::string> &field_names) {
   return Add(name, containers_["base"], field_names, false);
