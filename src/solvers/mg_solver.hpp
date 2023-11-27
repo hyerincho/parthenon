@@ -37,29 +37,47 @@ struct MGParams {
   std::string smoother = "SRJ2";
 };
 
+// The equations class must include a template method
+//
+//   template <class x_t, class y_t, class TL_t>
+//   TaskID Ax(TL_t &tl, TaskID depends_on, std::shared_ptr<MeshData<Real>> &md)
+//
+// that takes a field associated with x_t and applies
+// the matrix A to it and stores the result in y_t. Additionally,
+// it must include a template method
+//
+//  template <class diag_t>
+//  TaskStatus SetDiagonal(std::shared_ptr<MeshData<Real>> &md)
+//
+// That stores the (possibly approximate) diagonal of matrix A in the field
+// associated with the type diag_t. This is used for Jacobi iteration.
 template <class u, class rhs, class equations>
 class MGSolver {
  public:
-  INTERNALSOLVERVARIABLE(u, res_err); // residual on the way up and error on the way down
-  INTERNALSOLVERVARIABLE(u, temp);    // Temporary storage
-  INTERNALSOLVERVARIABLE(u, u0);      // Storage for initial solution during FAS
-  INTERNALSOLVERVARIABLE(u, D);       // Storage for (approximate) diagonal
+  PARTHENON_INTERNALSOLVERVARIABLE(
+      u, res_err); // residual on the way up and error on the way down
+  PARTHENON_INTERNALSOLVERVARIABLE(u, temp); // Temporary storage
+  PARTHENON_INTERNALSOLVERVARIABLE(u, u0);   // Storage for initial solution during FAS
+  PARTHENON_INTERNALSOLVERVARIABLE(u, D);    // Storage for (approximate) diagonal
 
-  MGSolver(StateDescriptor *pkg, MGParams params_in, equations eq_in = equations())
+  MGSolver(StateDescriptor *pkg, MGParams params_in, equations eq_in = equations(),
+           std::vector<int> shape = {})
       : params_(params_in), iter_counter(0), eqs_(eq_in) {
     using namespace parthenon::refinement_ops;
     auto mres_err =
         Metadata({Metadata::Cell, Metadata::Independent, Metadata::FillGhost,
-                  Metadata::GMGRestrict, Metadata::GMGProlongate, Metadata::OneCopy});
+                  Metadata::GMGRestrict, Metadata::GMGProlongate, Metadata::OneCopy},
+                 shape);
     mres_err.RegisterRefinementOps<ProlongateSharedLinear, RestrictAverage>();
     pkg->AddField(res_err::name(), mres_err);
 
     auto mtemp = Metadata({Metadata::Cell, Metadata::Independent, Metadata::FillGhost,
-                           Metadata::WithFluxes, Metadata::OneCopy});
+                           Metadata::WithFluxes, Metadata::OneCopy},
+                          shape);
     mtemp.RegisterRefinementOps<ProlongateSharedLinear, RestrictAverage>();
     pkg->AddField(temp::name(), mtemp);
 
-    auto mu0 = Metadata({Metadata::Cell, Metadata::Derived, Metadata::OneCopy});
+    auto mu0 = Metadata({Metadata::Cell, Metadata::Derived, Metadata::OneCopy}, shape);
     pkg->AddField(u0::name(), mu0);
     pkg->AddField(D::name(), mu0);
   }
@@ -149,9 +167,6 @@ class MGSolver {
     IndexRange jb = md->GetBoundsJ(IndexDomain::interior, te);
     IndexRange kb = md->GetBoundsK(IndexDomain::interior, te);
 
-    auto pkg = md->GetMeshPointer()->packages.Get("poisson_package");
-    const auto alpha = pkg->Param<Real>("diagonal_alpha");
-
     int nblocks = md->NumBlocks();
     std::vector<bool> include_block(nblocks, true);
 
@@ -166,15 +181,20 @@ class MGSolver {
           if ((i + j + k) % 2 == 1 && gs_type == GSType::red) return;
           if ((i + j + k) % 2 == 0 && gs_type == GSType::black) return;
 
-          Real diag_elem = pack(b, te, D_t(), k, j, i);
+          const int nvars =
+              pack.GetUpperBound(b, D_t()) - pack.GetLowerBound(b, D_t()) + 1;
+          for (int c = 0; c < nvars; ++c) {
+            Real diag_elem = pack(b, te, D_t(c), k, j, i);
 
-          // Get the off-diagonal contribution to Ax = (D + L + U)x = y
-          Real off_diag = pack(b, te, Axold_t(), k, j, i) -
-                          diag_elem * pack(b, te, xold_t(), k, j, i);
+            // Get the off-diagonal contribution to Ax = (D + L + U)x = y
+            Real off_diag = pack(b, te, Axold_t(c), k, j, i) -
+                            diag_elem * pack(b, te, xold_t(c), k, j, i);
 
-          Real val = pack(b, te, rhs_t(), k, j, i) - off_diag;
-          pack(b, te, xnew_t(), k, j, i) =
-              weight * val / diag_elem + (1.0 - weight) * pack(b, te, xold_t(), k, j, i);
+            Real val = pack(b, te, rhs_t(c), k, j, i) - off_diag;
+            pack(b, te, xnew_t(c), k, j, i) =
+                weight * val / diag_elem +
+                (1.0 - weight) * pack(b, te, xold_t(c), k, j, i);
+          }
         });
     return TaskStatus::complete;
   }

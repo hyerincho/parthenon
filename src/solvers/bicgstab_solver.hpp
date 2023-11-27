@@ -38,27 +38,36 @@ struct BiCGSTABParams {
   bool precondition = true;
 };
 
+// The equations class must include a template method
+//
+//   template <class x_t, class y_t, class TL_t>
+//   TaskID Ax(TL_t &tl, TaskID depends_on, std::shared_ptr<MeshData<Real>> &md)
+//
+// that takes a field associated with x_t and applies
+// the matrix A to it and stores the result in y_t.
 template <class x, class rhs, class equations>
 class BiCGSTABSolver {
  public:
-  INTERNALSOLVERVARIABLE(x, rhat0);
-  INTERNALSOLVERVARIABLE(x, v);
-  INTERNALSOLVERVARIABLE(x, h);
-  INTERNALSOLVERVARIABLE(x, s);
-  INTERNALSOLVERVARIABLE(x, t);
-  INTERNALSOLVERVARIABLE(x, r);
-  INTERNALSOLVERVARIABLE(x, p);
-  INTERNALSOLVERVARIABLE(x, u);
+  PARTHENON_INTERNALSOLVERVARIABLE(x, rhat0);
+  PARTHENON_INTERNALSOLVERVARIABLE(x, v);
+  PARTHENON_INTERNALSOLVERVARIABLE(x, h);
+  PARTHENON_INTERNALSOLVERVARIABLE(x, s);
+  PARTHENON_INTERNALSOLVERVARIABLE(x, t);
+  PARTHENON_INTERNALSOLVERVARIABLE(x, r);
+  PARTHENON_INTERNALSOLVERVARIABLE(x, p);
+  PARTHENON_INTERNALSOLVERVARIABLE(x, u);
 
   BiCGSTABSolver(StateDescriptor *pkg, BiCGSTABParams params_in,
-                 equations eq_in = equations())
-      : preconditioner(pkg, MGParams(), eq_in), params_(params_in), iter_counter(0),
-        eqs_(eq_in) {
+                 equations eq_in = equations(), std::vector<int> shape = {})
+      : preconditioner(pkg, MGParams(), eq_in, shape), params_(params_in),
+        iter_counter(0), eqs_(eq_in) {
     using namespace refinement_ops;
     auto mu = Metadata({Metadata::Cell, Metadata::Independent, Metadata::FillGhost,
-                        Metadata::WithFluxes, Metadata::GMGRestrict});
+                        Metadata::WithFluxes, Metadata::GMGRestrict},
+                       shape);
     mu.RegisterRefinementOps<ProlongateSharedLinear, RestrictAverage>();
-    auto m_no_ghost = Metadata({Metadata::Cell, Metadata::Derived, Metadata::OneCopy});
+    auto m_no_ghost =
+        Metadata({Metadata::Cell, Metadata::Derived, Metadata::OneCopy}, shape);
     pkg->AddField(u::name(), mu);
     pkg->AddField(rhat0::name(), m_no_ghost);
     pkg->AddField(v::name(), m_no_ghost);

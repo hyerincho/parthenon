@@ -44,6 +44,8 @@ class MeshBlockData;
 template <typename T>
 class MeshData;
 
+using BValFunc = std::function<void(std::shared_ptr<MeshBlockData<Real>> &, bool)>;
+
 /// A little container class owning refinement function properties
 /// needed for the state descriptor.
 /// Note using VarID here implies that custom prolongation/restriction
@@ -447,6 +449,7 @@ class StateDescriptor {
   std::function<void(MeshBlockData<Real> *rc)> InitNewlyAllocatedVarsBlock = nullptr;
 
   friend std::ostream &operator<<(std::ostream &os, const StateDescriptor &sd);
+  std::array<std::vector<BValFunc>, BOUNDARY_NFACES> UserBoundaryFunctions;
 
  protected:
   void InvertControllerMap();
