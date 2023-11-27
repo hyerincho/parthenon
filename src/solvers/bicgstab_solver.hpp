@@ -32,10 +32,12 @@ namespace parthenon {
 namespace solvers {
 
 struct BiCGSTABParams {
+  MGParams mg_params;
   int max_iters = 10;
   Real residual_tolerance = 1.e-12;
   Real restart_threshold = -1.0;
   bool precondition = true;
+  bool print_per_step = false;
 };
 
 // The equations class must include a template method
@@ -45,30 +47,36 @@ struct BiCGSTABParams {
 //
 // that takes a field associated with x_t and applies
 // the matrix A to it and stores the result in y_t.
-template <class x, class rhs, class equations>
+template <class u, class rhs, class equations>
 class BiCGSTABSolver {
  public:
-  PARTHENON_INTERNALSOLVERVARIABLE(x, rhat0);
-  PARTHENON_INTERNALSOLVERVARIABLE(x, v);
-  PARTHENON_INTERNALSOLVERVARIABLE(x, h);
-  PARTHENON_INTERNALSOLVERVARIABLE(x, s);
-  PARTHENON_INTERNALSOLVERVARIABLE(x, t);
-  PARTHENON_INTERNALSOLVERVARIABLE(x, r);
-  PARTHENON_INTERNALSOLVERVARIABLE(x, p);
-  PARTHENON_INTERNALSOLVERVARIABLE(x, u);
+  PARTHENON_INTERNALSOLVERVARIABLE(u, rhat0);
+  PARTHENON_INTERNALSOLVERVARIABLE(u, v);
+  PARTHENON_INTERNALSOLVERVARIABLE(u, h);
+  PARTHENON_INTERNALSOLVERVARIABLE(u, s);
+  PARTHENON_INTERNALSOLVERVARIABLE(u, t);
+  PARTHENON_INTERNALSOLVERVARIABLE(u, r);
+  PARTHENON_INTERNALSOLVERVARIABLE(u, p);
+  PARTHENON_INTERNALSOLVERVARIABLE(u, x);
+  
+  std::vector<std::string> GetInternalVariableNames() const {
+    std::vector<std::string> names{rhat0::name(), v::name(), h::name(), s::name(),
+                                   t::name(),     r::name(), p::name(), x::name()};
+    if (params_.precondition) {
+      auto pre_names = preconditioner.GetInternalVariableNames();
+      names.insert(names.end(), pre_names.begin(), pre_names.end());
+    }
+    return names;
+  }
 
   BiCGSTABSolver(StateDescriptor *pkg, BiCGSTABParams params_in,
                  equations eq_in = equations(), std::vector<int> shape = {})
-      : preconditioner(pkg, MGParams(), eq_in, shape), params_(params_in),
-        iter_counter(0), eqs_(eq_in) {
+      : preconditioner(pkg, params_in.mg_params, eq_in, shape), params_(params_in),
+        iter_counter(0), eqs_(eq_in), presidual_tolerance(&params_in.residual_tolerance) {
     using namespace refinement_ops;
-    auto mu = Metadata({Metadata::Cell, Metadata::Independent, Metadata::FillGhost,
-                        Metadata::WithFluxes, Metadata::GMGRestrict},
-                       shape);
-    mu.RegisterRefinementOps<ProlongateSharedLinear, RestrictAverage>();
     auto m_no_ghost =
         Metadata({Metadata::Cell, Metadata::Derived, Metadata::OneCopy}, shape);
-    pkg->AddField(u::name(), mu);
+    pkg->AddField(x::name(), m_no_ghost);
     pkg->AddField(rhat0::name(), m_no_ghost);
     pkg->AddField(v::name(), m_no_ghost);
     pkg->AddField(h::name(), m_no_ghost);
@@ -109,7 +117,7 @@ class BiCGSTABSolver {
         this, i);
     region.AddRegionalDependencies(reg_dep_id, i, initialize);
     reg_dep_id++;
-    if (i == 0) {
+    if (i == 0 && params_.print_per_step) {
       tl.AddTask(dependence, [&]() {
         if (Globals::my_rank == 0)
           printf("# [0] v-cycle\n# [1] rms-residual\n# [2] rms-error\n");
@@ -164,7 +172,7 @@ class BiCGSTABSolver {
         [&](BiCGSTABSolver *solver, Mesh *pmesh, int partition) {
           if (partition != 0) return TaskStatus::complete;
           Real rms_res = std::sqrt(solver->residual.val / pmesh->GetTotalCells());
-          if (Globals::my_rank == 0)
+          if (Globals::my_rank == 0 && solver->params_.print_per_step)
             printf("%i %e\n", solver->iter_counter * 2 + 1, rms_res);
           return TaskStatus::complete;
         },
@@ -216,7 +224,7 @@ class BiCGSTABSolver {
           get_res2,
           [&](BiCGSTABSolver *solver, Mesh *pmesh) {
             Real rms_err = std::sqrt(solver->residual.val / pmesh->GetTotalCells());
-            if (Globals::my_rank == 0)
+            if (Globals::my_rank == 0 && solver->params_.print_per_step)
               printf("%i %e\n", solver->iter_counter * 2 + 2, rms_err);
             return TaskStatus::complete;
           },
@@ -246,11 +254,11 @@ class BiCGSTABSolver {
     auto check = itl.SetCompletionTask(
         update_p | correct_x,
         [](BiCGSTABSolver *solver, Mesh *pmesh, int partition, int max_iter,
-           Real res_tol) {
+           Real *res_tol) {
           if (partition != 0) return TaskStatus::complete;
           solver->iter_counter++;
           Real rms_res = std::sqrt(solver->residual.val / pmesh->GetTotalCells());
-          if (rms_res < res_tol || solver->iter_counter >= max_iter) {
+          if (rms_res < *res_tol || solver->iter_counter >= max_iter) {
             solver->final_residual = rms_res;
             solver->final_iteration = solver->iter_counter;
             return TaskStatus::complete;
@@ -263,11 +271,11 @@ class BiCGSTABSolver {
           solver->residual.val = 0.0;
           return TaskStatus::iterate;
         },
-        this, pmesh, i, params_.max_iters, params_.residual_tolerance);
+        this, pmesh, i, params_.max_iters, presidual_tolerance);
     region.AddGlobalDependencies(reg_dep_id, i, check);
     reg_dep_id++;
 
-    return check;
+    return tl.AddTask(check, CopyData<x, u>, md);
   }
 
   Real GetSquaredResidualSum() const { return residual.val; }
@@ -275,6 +283,8 @@ class BiCGSTABSolver {
 
   Real GetFinalResidual() const { return final_residual; }
   int GetFinalIterations() const { return final_iteration; }
+
+  void UpdateResidualTolerance(Real *ptol) { presidual_tolerance = ptol; }
 
  protected:
   MGSolver<u, rhs, equations> preconditioner;
@@ -285,6 +295,7 @@ class BiCGSTABSolver {
   equations eqs_;
   Real final_residual;
   int final_iteration;
+  Real *presidual_tolerance;
 };
 
 } // namespace solvers
