@@ -65,6 +65,19 @@ DriverStatus EvolutionDriver::Execute() {
   PreExecute();
   InitializeBlockTimeStepsAndBoundaries();
   SetGlobalTimeStep();
+
+  // Before loop do work
+  // App input version
+  Kokkos::Profiling::pushRegion("Driver_UserWorkBeforeLoop");
+  if (app_input->UserWorkBeforeLoop != nullptr) {
+    app_input->UserWorkBeforeLoop(pmesh, pinput, tm);
+  }
+  // packages version
+  for (auto &[name, pkg] : pmesh->packages.AllPackages()) {
+    pkg->UserWorkBeforeLoop(pmesh, pinput, tm);
+  }
+  Kokkos::Profiling::popRegion(); // Driver_UserWorkBeforeLoop
+
   OutputSignal signal =
       pmesh->analysis_flag ? OutputSignal::analysis : OutputSignal::none;
   pouts->MakeOutputs(pmesh, pinput, &tm, signal);
@@ -171,6 +184,11 @@ void EvolutionDriver::InitializeBlockTimeStepsAndBoundaries() {
     auto &mbase = pmesh->mesh_data.GetOrAdd("base", i);
     Update::EstimateTimestep(mbase.get());
     BuildBoundaryBuffers(mbase);
+    for (int gmg_level = 0; gmg_level < pmesh->gmg_mesh_data.size(); ++gmg_level) {
+      auto &mdg = pmesh->gmg_mesh_data[gmg_level].GetOrAdd(gmg_level, "base", i);
+      BuildBoundaryBuffers(mdg);
+      BuildGMGBoundaryBuffers(mdg);
+    }
   }
 }
 

@@ -13,11 +13,20 @@
 #ifndef SOLVERS_SOLVER_UTILS_HPP_
 #define SOLVERS_SOLVER_UTILS_HPP_
 
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "basic_types.hpp"
 #include "kokkos_abstraction.hpp"
+
+#define PARTHENON_INTERNALSOLVERVARIABLE(base, varname)                                  \
+  struct varname : public parthenon::variable_names::base_t<false> {                     \
+    template <class... Ts>                                                               \
+    KOKKOS_INLINE_FUNCTION varname(Ts &&...args)                                         \
+        : parthenon::variable_names::base_t<false>(std::forward<Ts>(args)...) {}         \
+    static std::string name() { return base::name() + "." #varname; }                    \
+  }
 
 namespace parthenon {
 
@@ -25,20 +34,12 @@ namespace solvers {
 
 struct SparseMatrixAccessor {
   ParArray1D<int> ioff, joff, koff;
-  ParArray1D<int> ioff_inv, joff_inv, koff_inv;
-  ParArray1D<int> inv_entries;
-
   const int nstencil;
   int ndiag;
-  SparseMatrixAccessor() : nstencil(0), ndiag(0) {}
-  SparseMatrixAccessor(const SparseMatrixAccessor &sp)
-      : ioff(sp.ioff), joff(sp.joff), koff(sp.koff), nstencil(sp.nstencil),
-        ndiag(sp.ndiag), inv_entries(sp.inv_entries) {}
+
   SparseMatrixAccessor(const std::string &label, const int n,
                        std::vector<std::vector<int>> off)
       : ioff(label + "_ioff", n), joff(label + "_joff", n), koff(label + "_koff", n),
-        ioff_inv(label + "_ioff_inv", n), joff_inv(label + "_joff_inv", n),
-        koff_inv(label + "_koff_inv", n), inv_entries(label + "_inv_ent", n),
         nstencil(n) {
     PARTHENON_REQUIRE_THROWS(off.size() == 3,
                              "Offset array must have dimensions off[3][*]");
@@ -49,40 +50,18 @@ struct SparseMatrixAccessor {
     auto joff_h = Kokkos::create_mirror_view(Kokkos::HostSpace(), joff);
     auto koff_h = Kokkos::create_mirror_view(Kokkos::HostSpace(), koff);
 
-    auto ioff_inv_h = Kokkos::create_mirror_view(Kokkos::HostSpace(), ioff_inv);
-    auto joff_inv_h = Kokkos::create_mirror_view(Kokkos::HostSpace(), joff_inv);
-    auto koff_inv_h = Kokkos::create_mirror_view(Kokkos::HostSpace(), koff_inv);
-
-    auto inv_ent_h = Kokkos::create_mirror_view(Kokkos::HostSpace(), inv_entries);
-
     for (int i = 0; i < n; i++) {
       ioff_h(i) = off[0][i];
       joff_h(i) = off[1][i];
       koff_h(i) = off[2][i];
-      // this is inverse.
-      ioff_inv_h(i) = -off[0][i];
-      joff_inv_h(i) = -off[1][i];
-      koff_inv_h(i) = -off[2][i];
-
       if (off[0][i] == 0 && off[1][i] == 0 && off[2][i] == 0) {
         ndiag = i;
       }
     }
-    for (int i = 0; i < n; i++) {
-      for (int j = 0; j < n; j++) {
-        if (ioff_h(i) == ioff_inv_h(j) && joff_h(i) == joff_inv_h(j) &&
-            koff_h(i) == koff_inv_h(j)) {
-          inv_entries(i) = j;
-          std::cout << "inv_entries:" << i << " " << j << std::endl;
-        }
-      } // j
-    }   // i
 
     Kokkos::deep_copy(ioff, ioff_h);
     Kokkos::deep_copy(joff, joff_h);
     Kokkos::deep_copy(koff, koff_h);
-
-    Kokkos::deep_copy(inv_entries, inv_ent_h);
   }
 
   template <typename PackType>
@@ -115,10 +94,7 @@ struct Stencil {
   ParArray1D<int> ioff, joff, koff;
   const int nstencil;
   int ndiag;
-  Stencil() : nstencil(0), ndiag(0) {}
-  Stencil(const Stencil<T> &st)
-      : w(st.w), ioff(st.ioff), joff(st.joff), koff(st.koff), nstencil(st.nstencil),
-        ndiag(st.ndiag) {}
+
   Stencil(const std::string &label, const int n, std::vector<T> wgt,
           std::vector<std::vector<int>> off)
       : w(label + "_w", n), ioff(label + "_ioff", n), joff(label + "_joff", n),
@@ -168,6 +144,154 @@ struct Stencil {
     return (rhs - matvec + w(ndiag) * v(b, iv, k, j, i)) / w(ndiag);
   }
 };
+
+namespace utils {
+template <class in, class out, bool only_fine_on_composite = true>
+TaskStatus CopyData(const std::shared_ptr<MeshData<Real>> &md) {
+  using TE = parthenon::TopologicalElement;
+  TE te = TE::CC;
+  IndexRange ib = md->GetBoundsI(IndexDomain::entire, te);
+  IndexRange jb = md->GetBoundsJ(IndexDomain::entire, te);
+  IndexRange kb = md->GetBoundsK(IndexDomain::entire, te);
+
+  static auto desc = parthenon::MakePackDescriptor<in, out>(md.get());
+  auto pack = desc.GetPack(md.get(), only_fine_on_composite);
+  parthenon::par_for(
+      DEFAULT_LOOP_PATTERN, "CopyData", DevExecSpace(), 0, pack.GetNBlocks() - 1, kb.s,
+      kb.e, jb.s, jb.e, ib.s, ib.e,
+      KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
+        const int nvars = pack.GetUpperBound(b, in()) - pack.GetLowerBound(b, in()) + 1;
+        for (int c = 0; c < nvars; ++c)
+          pack(b, te, out(c), k, j, i) = pack(b, te, in(c), k, j, i);
+      });
+  return TaskStatus::complete;
+}
+
+template <class a_t, class b_t, class out, bool only_fine_on_composite = true>
+TaskStatus AddFieldsAndStoreInteriorSelect(const std::shared_ptr<MeshData<Real>> &md,
+                                           Real wa = 1.0, Real wb = 1.0,
+                                           bool only_interior_blocks = false) {
+  using TE = parthenon::TopologicalElement;
+  TE te = TE::CC;
+  IndexRange ib = md->GetBoundsI(IndexDomain::entire, te);
+  IndexRange jb = md->GetBoundsJ(IndexDomain::entire, te);
+  IndexRange kb = md->GetBoundsK(IndexDomain::entire, te);
+
+  int nblocks = md->NumBlocks();
+  std::vector<bool> include_block(nblocks, true);
+  if (only_interior_blocks) {
+    // The neighbors array will only be set for a block if its a leaf block
+    for (int b = 0; b < nblocks; ++b)
+      include_block[b] = md->GetBlockData(b)->GetBlockPointer()->neighbors.size() == 0;
+  }
+
+  static auto desc = parthenon::MakePackDescriptor<a_t, b_t, out>(md.get());
+  auto pack = desc.GetPack(md.get(), include_block, only_fine_on_composite);
+  parthenon::par_for(
+      DEFAULT_LOOP_PATTERN, "AddFieldsAndStore", DevExecSpace(), 0, pack.GetNBlocks() - 1,
+      kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
+      KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
+        const int nvars = pack.GetUpperBound(b, a_t()) - pack.GetLowerBound(b, a_t()) + 1;
+        for (int c = 0; c < nvars; ++c) {
+          pack(b, te, out(c), k, j, i) =
+              wa * pack(b, te, a_t(c), k, j, i) + wb * pack(b, te, b_t(c), k, j, i);
+        }
+      });
+  return TaskStatus::complete;
+}
+
+template <class a_t, class b_t, class out, bool only_fine_on_composite = true>
+TaskStatus AddFieldsAndStore(const std::shared_ptr<MeshData<Real>> &md, Real wa = 1.0,
+                             Real wb = 1.0) {
+  return AddFieldsAndStoreInteriorSelect<a_t, b_t, out, only_fine_on_composite>(
+      md, wa, wb, false);
+}
+
+template <class var, bool only_fine_on_composite = true>
+TaskStatus SetToZero(const std::shared_ptr<MeshData<Real>> &md) {
+  int nblocks = md->NumBlocks();
+  using TE = parthenon::TopologicalElement;
+  TE te = TE::CC;
+  static auto desc = parthenon::MakePackDescriptor<var>(md.get());
+  auto pack = desc.GetPack(md.get(), only_fine_on_composite);
+  const size_t scratch_size_in_bytes = 0;
+  const int scratch_level = 1;
+  const int ng = parthenon::Globals::nghost;
+  parthenon::par_for_outer(
+      DEFAULT_OUTER_LOOP_PATTERN, "SetFieldsToZero", DevExecSpace(),
+      scratch_size_in_bytes, scratch_level, 0, pack.GetNBlocks() - 1,
+      KOKKOS_LAMBDA(parthenon::team_mbr_t member, const int b) {
+        auto cb = GetIndexShape(pack(b, te, 0), ng);
+        const auto &coords = pack.GetCoordinates(b);
+        IndexRange ib = cb.GetBoundsI(IndexDomain::entire, te);
+        IndexRange jb = cb.GetBoundsJ(IndexDomain::entire, te);
+        IndexRange kb = cb.GetBoundsK(IndexDomain::entire, te);
+        parthenon::par_for_inner(parthenon::inner_loop_pattern_simdfor_tag, member, kb.s,
+                                 kb.e, jb.s, jb.e, ib.s, ib.e, [&](int k, int j, int i) {
+                                   const int nvars = pack.GetUpperBound(b, var()) -
+                                                     pack.GetLowerBound(b, var()) + 1;
+                                   for (int c = 0; c < nvars; ++c)
+                                     pack(b, te, var(c), k, j, i) = 0.0;
+                                 });
+      });
+  return TaskStatus::complete;
+}
+
+template <class a_t, class b_t>
+TaskStatus DotProductLocal(const std::shared_ptr<MeshData<Real>> &md,
+                           AllReduce<Real> *adotb) {
+  using TE = parthenon::TopologicalElement;
+  TE te = TE::CC;
+  IndexRange ib = md->GetBoundsI(IndexDomain::interior, te);
+  IndexRange jb = md->GetBoundsJ(IndexDomain::interior, te);
+  IndexRange kb = md->GetBoundsK(IndexDomain::interior, te);
+
+  static auto desc = parthenon::MakePackDescriptor<a_t, b_t>(md.get());
+  auto pack = desc.GetPack(md.get());
+  Real gsum(0);
+  parthenon::par_reduce(
+      parthenon::loop_pattern_mdrange_tag, "DotProduct", DevExecSpace(), 0,
+      pack.GetNBlocks() - 1, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
+      KOKKOS_LAMBDA(const int b, const int k, const int j, const int i, Real &lsum) {
+        const int nvars = pack.GetUpperBound(b, a_t()) - pack.GetLowerBound(b, a_t()) + 1;
+        for (int c = 0; c < nvars; ++c)
+          lsum += pack(b, te, a_t(c), k, j, i) * pack(b, te, b_t(c), k, j, i);
+      },
+      Kokkos::Sum<Real>(gsum));
+  adotb->val += gsum;
+  return TaskStatus::complete;
+}
+
+template <class a_t, class b_t, class TL_t>
+TaskID DotProduct(TaskID dependency_in, TaskRegion &region, TL_t &tl, int partition,
+                  int &reg_dep_id, AllReduce<Real> *adotb,
+                  const std::shared_ptr<MeshData<Real>> &md) {
+  using namespace impl;
+  auto zero_adotb = (partition == 0 ? tl.AddTask(
+                                          dependency_in,
+                                          [](AllReduce<Real> *r) {
+                                            r->val = 0.0;
+                                            return TaskStatus::complete;
+                                          },
+                                          adotb)
+                                    : dependency_in);
+  region.AddRegionalDependencies(reg_dep_id, partition, zero_adotb);
+  reg_dep_id++;
+  auto get_adotb = tl.AddTask(zero_adotb, DotProductLocal<a_t, b_t>, md, adotb);
+  region.AddRegionalDependencies(reg_dep_id, partition, get_adotb);
+  reg_dep_id++;
+  auto start_global_adotb =
+      (partition == 0
+           ? tl.AddTask(get_adotb, &AllReduce<Real>::StartReduce, adotb, MPI_SUM)
+           : get_adotb);
+  auto finish_global_adotb =
+      tl.AddTask(start_global_adotb, &AllReduce<Real>::CheckReduce, adotb);
+  region.AddRegionalDependencies(reg_dep_id, partition, finish_global_adotb);
+  reg_dep_id++;
+  return finish_global_adotb;
+}
+
+} // namespace utils
 
 } // namespace solvers
 
