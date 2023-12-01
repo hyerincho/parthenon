@@ -69,3 +69,64 @@ variables = advected, one_minus_advected, & # comments are ok
 <parthenon/output1>
 file_type = hst
 dt = 0.25
+
+<parthenon/output2>
+file_type = histogram
+dt = 0.25
+
+num_histograms = 3
+
+# 1D histogram of a variable, binned by a variable
+hist0_ndim = 1
+hist0_x_variable = advected
+hist0_x_variable_component = 0
+hist0_x_edges_type = list
+hist0_x_edges_list = 1e-9, 1e-4,1e-1, 2e-1, 5e-1 ,1.0
+hist0_binned_variable = advected
+hist0_binned_variable_component = 0
+
+# 2D histogram of a variable, binned by a coordinate and a different variable
+hist1_ndim = 2
+hist1_x_variable = HIST_COORD_X1
+hist1_x_edges_type = lin
+hist1_x_edges_num_bins = 4
+hist1_x_edges_min = -0.5
+hist1_x_edges_max = 0.5
+hist1_y_variable = one_minus_advected_sq
+hist1_y_variable_component = 0
+hist1_y_edges_type = list
+hist1_y_edges_list = 0, 0.5, 1.0
+hist1_binned_variable = advected
+hist1_binned_variable_component = 0
+
+# 1D histogram ("standard", i.e., counting occurance in bin)
+hist2_ndim = 1
+hist2_x_variable = advected
+hist2_x_variable_component = 0
+hist2_x_edges_type = log
+hist2_x_edges_num_bins = 10
+hist2_x_edges_min = 1e-9
+hist2_x_edges_max = 1e0
+hist2_binned_variable = HIST_ONES
+
+# A second output block with different dt for histograms
+# to double check that writing to different files works
+<parthenon/output3>
+file_type = histogram
+dt = 0.5
+
+num_histograms = 1
+
+# 2D histogram of volume weighted variable according to two coordinates
+hist0_ndim = 2
+hist0_x_variable = HIST_COORD_X1
+hist0_x_edges_type = list
+hist0_x_edges_list = -0.5, -0.25, 0.0, 0.25, 0.5
+hist0_y_variable = HIST_COORD_X2
+hist0_y_edges_type = list
+hist0_y_edges_list = -0.5, -0.1, 0.0, 0.1, 0.5
+hist0_binned_variable = advected
+hist0_binned_variable_component = 0
+hist0_weight_by_volume = true
+hist0_weight_variable = one_minus_advected_sq
+hist0_weight_variable_component = 0

@@ -160,6 +160,7 @@ void ParthenonManager::ParthenonInitPackagesAndMesh() {
   if (arg.res_flag == 0) {
     pmesh =
         std::make_unique<Mesh>(pinput.get(), app_input.get(), packages, arg.mesh_flag);
+    pmesh->analysis_flag = false;
   } else {
     // Open restart file
     // Read Mesh from restart file and create meshblocks
@@ -182,6 +183,12 @@ void ParthenonManager::ParthenonInitPackagesAndMesh() {
     // close hdf5 file to prevent HDF5 hangs and corrupted files
     // if code dies after restart
     restartReader = nullptr;
+
+    if (arg.analysis_flag == 1) {
+      pmesh->analysis_flag = true;
+    } else {
+      pmesh->analysis_flag = false;
+    }
   }
 
   // add root_level to all max_level

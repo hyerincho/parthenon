@@ -25,10 +25,13 @@
 #include <string>
 #include <vector>
 
+#include "Kokkos_ScatterView.hpp"
+
 #include "basic_types.hpp"
 #include "coordinates/coordinates.hpp"
 #include "interface/mesh_data.hpp"
 #include "io_wrapper.hpp"
+#include "kokkos_abstraction.hpp"
 #include "parthenon_arrays.hpp"
 #include "utils/error_checking.hpp"
 
@@ -48,6 +51,7 @@ struct OutputParameters {
   std::string file_basename;
   int file_number_width;
   bool file_label_final;
+  bool analysis_flag; // write this output for analysis/postprocessing restarts
   std::string file_id;
   std::vector<std::string> variables;
   std::vector<std::string> component_labels;
@@ -213,6 +217,58 @@ class PHDF5Output : public OutputType {
   void ComputeCoords_(Mesh *pm, bool face, const IndexRange &ib, const IndexRange &jb,
                       const IndexRange &kb, std::vector<Real> &x, std::vector<Real> &y,
                       std::vector<Real> &z);
+};
+
+//----------------------------------------------------------------------------------------
+//! \class HistogramOutput
+//  \brief derived OutputType class for histograms
+
+namespace HistUtil {
+
+enum class VarType { X1, X2, X3, R, Var, Unused };
+enum class EdgeType { Lin, Log, List, Undefined };
+
+struct Histogram {
+  int ndim;                             // 1D or 2D histogram
+  std::string x_var_name, y_var_name;   // variable(s) for bins
+  VarType x_var_type, y_var_type;       // type, e.g., coord related or actual field
+  int x_var_component, y_var_component; // components of bin variables (vector)
+  ParArray1D<Real> x_edges, y_edges;
+  EdgeType x_edges_type, y_edges_type;
+  // Lowest edge and difference between edges.
+  // Internally used to speed up lookup for log (and lin) bins as otherwise
+  // two more log10 calls would be required per index.
+  Real x_edge_min, x_edge_dbin, y_edge_min, y_edge_dbin;
+  std::string binned_var_name; // variable name of variable to be binned
+  // component of variable to be binned. If -1 means no variable is binned but the
+  // histgram is a sample count.
+  int binned_var_component;
+  bool weight_by_vol;          // use volume weighting
+  std::string weight_var_name; // variable name of variable used as weight
+  // component of variable to be used as weight. If -1 means no weighting
+  int weight_var_component;
+  ParArray2D<Real> result; // resulting histogram
+
+  // temp view for histogram reduction for better performance (switches
+  // between atomics and data duplication depending on the platform)
+  Kokkos::Experimental::ScatterView<Real **, LayoutWrapper> scatter_result;
+  Histogram(ParameterInput *pin, const std::string &block_name,
+            const std::string &prefix);
+};
+
+} // namespace HistUtil
+
+class HistogramOutput : public OutputType {
+ public:
+  HistogramOutput(const OutputParameters &oparams, ParameterInput *pin);
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin, SimTime *tm,
+                       const SignalHandler::OutputSignal signal) override;
+
+ private:
+  std::string GenerateFilename_(ParameterInput *pin, SimTime *tm,
+                                const SignalHandler::OutputSignal signal);
+  int num_histograms_; // number of different histograms to compute
+  std::vector<HistUtil::Histogram> histograms_;
 };
 #endif // ifdef ENABLE_HDF5
 
