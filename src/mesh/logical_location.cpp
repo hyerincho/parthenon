@@ -112,8 +112,31 @@ template <bool TENeighbor>
 bool LogicalLocation::NeighborFindingImpl(const LogicalLocation &in,
                                           const std::array<int, 3> &te_offset,
                                           const RootGridInfo &rg_info) const {
-  if (in.level() >= level() && Contains(in)) return false;      // You share a volume
-  if (in.level() < level() && in.Contains(*this)) return false; // You share a volume
+
+  // A block at the highest level can be its own neighbor in periodic conditions
+  bool oneblock_x1 = (rg_info.n[0] == 1 && rg_info.periodic[0]);
+  bool oneblock_x2 = (rg_info.n[1] == 1 && rg_info.periodic[1]);
+  bool oneblock_x3 = (rg_info.n[2] == 1 && rg_info.periodic[2]);
+  if (in == *this && level() == 2 && (oneblock_x1 || oneblock_x2 || oneblock_x3)) {
+    // Self-border on a face
+    if ((oneblock_x1 && te_offset[0] != 0) ||
+        (oneblock_x2 && te_offset[1] != 0) ||
+        (oneblock_x3 && te_offset[2] != 0) ||
+    // Self-border over an edge (requires 2 one-block dimensions)
+        (oneblock_x1 && oneblock_x2 && te_offset[0] != 0 && te_offset[1] != 0) ||
+        (oneblock_x2 && oneblock_x3 && te_offset[1] != 0 && te_offset[2] != 0) ||
+        (oneblock_x1 && oneblock_x3 && te_offset[0] != 0 && te_offset[2] != 0) ||
+    // Self-border over a corner (only if block is completely alone)
+        (oneblock_x1 && oneblock_x2 && oneblock_x3 &&
+         te_offset[0] != 0 && te_offset[1] != 0 && te_offset[2] != 0))
+      return true;
+    else
+      return false;
+  }
+
+  // Otherwise, nothing which shares a volume is a neighbor
+  if (in.level() >= level() && Contains(in)) return false;
+  if (in.level() < level() && in.Contains(*this)) return false;
 
   // We work on the finer level of in.level() and this->level()
   const int max_level = std::max(in.level(), level());
