@@ -112,9 +112,8 @@ template <bool TENeighbor>
 bool LogicalLocation::NeighborFindingImpl(const LogicalLocation &in,
                                           const std::array<int, 3> &te_offset,
                                           const RootGridInfo &rg_info) const {
-  // Otherwise, nothing which shares a volume is a neighbor
-  if (in.level() >= level() && Contains(in)) return false;
-  if (in.level() < level() && in.Contains(*this)) return false;
+  if (in.level() >= level() && Contains(in)) return false;      // You share a volume
+  if (in.level() < level() && in.Contains(*this)) return false; // You share a volume
 
   // We work on the finer level of in.level() and this->level()
   const int max_level = std::max(in.level(), level());
@@ -325,18 +324,10 @@ DetermineOwnership(const LogicalLocation &main_block,
     bool oneblock_x1 = (rg_info.n[0] == 1 && rg_info.periodic[0]);
     bool oneblock_x2 = (rg_info.n[1] == 1 && rg_info.periodic[1]);
     bool oneblock_x3 = (rg_info.n[2] == 1 && rg_info.periodic[2]);
-    // Self-border on a face: 
-    if ((oneblock_x1 && (ox1 < 0 && ox2 == 0 && ox3 == 0)) ||
-        (oneblock_x2 && (ox2 < 0 && ox1 == 0 && ox3 == 0)) ||
-        (oneblock_x3 && (ox3 < 0 && ox1 == 0 && ox2 == 0)) ||
-    // Self-border over an edge (requires 2 one-block dimensions)
-    // All edges except right-right are "left"
-        (oneblock_x1 && oneblock_x2 && (ox1 < 0 && ox2 < 0) && ox3 == 0) ||
-        (oneblock_x2 && oneblock_x3 && (ox2 < 0 && ox3 < 0) && ox1 == 0) ||
-        (oneblock_x1 && oneblock_x3 && (ox1 < 0 && ox3 < 0) && ox2 == 0) ||
-    // Self-border over a corner (only if block is completely alone)
-        (oneblock_x1 && oneblock_x2 && oneblock_x3 &&
-         (ox1 < 0 || ox2 < 0 || ox3 < 0))) {
+    // Can take care of each direction independently, corners follow
+    if ((oneblock_x1 && ox1 < 0) ||
+        (oneblock_x2 && ox2 < 0) ||
+        (oneblock_x3 && ox3 < 0)) {
         return true;
     } else {
       return false;
@@ -348,9 +339,15 @@ DetermineOwnership(const LogicalLocation &main_block,
       for (int ox3 : {-1, 0, 1}) {
         main_owns(ox1, ox2, ox3) = true;
         for (auto &n : allowed_neighbors) {
-          if ((ownership_less_than(main_block, n) &&
-              main_block.IsNeighborOfTE(n, ox1, ox2, ox3, rg_info)) ||
-              self_border_left(ox1, ox2, ox3)) {
+          // If the other block we border takes precedence, or
+          // we are at highest level & border *ourselves* on the left
+          if (ownership_less_than(main_block, n) &&
+              main_block.IsNeighborOfTE(n, ox1, ox2, ox3, rg_info)) {
+            main_owns(ox1, ox2, ox3) = false;
+            break;
+          } else if (main_block.level() == rg_info.level &&
+                     main_block == n &&
+                     self_border_left(ox1, ox2, ox3)) {
             main_owns(ox1, ox2, ox3) = false;
             break;
           }
