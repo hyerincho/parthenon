@@ -297,9 +297,10 @@ class MeshBlock : public std::enable_shared_from_this<MeshBlock> {
                               ParameterInput *pin); // called in Mesh fn (friend class)
   std::function<void(MeshBlock *, ParameterInput *)> UserWorkBeforeOutput =
       &UserWorkBeforeOutputDefault;
-  void SetBlockTimestep(const Real dt) { new_block_dt_ = dt; }
-  void SetAllowedDt(const Real dt) { new_block_dt_ = dt; }
+  void SetBlockTimestep(const Real dt) { new_block_dt_ = dt; if (dt < 0.1 * std::numeric_limits<Real>::max()) new_block_dt_nonmax_ = dt; }
+  void SetAllowedDt(const Real dt) { new_block_dt_ = dt; if (dt < 0.1 * std::numeric_limits<Real>::max()) new_block_dt_nonmax_ = dt; }
   Real NewDt() const { return new_block_dt_; }
+  Real NewNonMaxDt() const { return new_block_dt_nonmax_; }
 
   // It would be nice for these par_dispatch_ functions to be private, but they can't be
   // 1D default loop pattern
@@ -422,7 +423,7 @@ class MeshBlock : public std::enable_shared_from_this<MeshBlock> {
  private:
   // data
   Real new_block_dt_, new_block_dt_hyperbolic_, new_block_dt_parabolic_,
-      new_block_dt_user_;
+      new_block_dt_user_, new_block_dt_nonmax_;
   std::vector<std::shared_ptr<Variable<Real>>> vars_cc_;
 
   // Initializer to set up a meshblock called with the default constructor

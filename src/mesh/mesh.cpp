@@ -543,6 +543,9 @@ Mesh::Mesh(ParameterInput *pin, ApplicationInput *app_in, RestartReader &rr,
   mesh_size.xmin(X3DIR) = grid_dim[6];
   mesh_size.xmax(X3DIR) = grid_dim[7];
   mesh_size.xrat(X3DIR) = grid_dim[8];
+  
+  // initialize user-enrollable functions
+  default_pack_size_ = pin->GetOrAddInteger("parthenon/mesh", "pack_size", -1);
 
   // initialize
   loclist = std::vector<LogicalLocation>(nbtotal);

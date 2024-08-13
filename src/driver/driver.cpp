@@ -199,12 +199,15 @@ void EvolutionDriver::InitializeBlockTimeStepsAndBoundaries() {
 void EvolutionDriver::SetGlobalTimeStep() {
   // don't allow dt to grow by more than 2x
   // consider making this configurable in the input
-  if (tm.dt < 0.1 * std::numeric_limits<Real>::max()) {
-    tm.dt *= 2.0;
-  }
+  //if (tm.dt < 0.1 * std::numeric_limits<Real>::max()) {
+  //  tm.dt *= 2.0;
+  //}
+  const bool in_loop = (tm.time > 0);
   Real big = std::numeric_limits<Real>::max();
+  tm.dt = big;
   for (auto const &pmb : pmesh->block_list) {
     tm.dt = std::min(tm.dt, pmb->NewDt());
+    if (in_loop) pmb->SetAllowedDt(2 * pmb->NewDt()); // make it twice here
     pmb->SetAllowedDt(big);
   }
 

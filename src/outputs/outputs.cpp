@@ -115,9 +115,11 @@ Outputs::Outputs(Mesh *pm, ParameterInput *pin, SimTime *tm) {
       op.block_name.assign(pib->block_name);
 
       Real dt = 0.0; // default value == 0 means that initial data is written by default
+      int dn = 0; 
       // for temporal drivers, setting dt to tlim ensures a final output is also written
       if (tm != nullptr) {
         dt = pin->GetOrAddReal(op.block_name, "dt", tm->tlim);
+        dn = pin->GetOrAddInteger(op.block_name, "dn", tm->nlim);
       }
       // if this output is "soft-disabled" (negative value) skip processing
       if (dt < 0.0) {
@@ -128,6 +130,8 @@ Outputs::Outputs(Mesh *pm, ParameterInput *pin, SimTime *tm) {
       if (tm != nullptr) {
         op.next_time = pin->GetOrAddReal(op.block_name, "next_time", tm->time);
         op.dt = dt;
+        op.next_ncycle = pin->GetOrAddInteger(op.block_name, "next_ncycle", tm->ncycle);
+        op.dn = dn;
       }
 
       // set file number, basename, id, and format
@@ -423,6 +427,7 @@ void Outputs::MakeOutputs(Mesh *pm, ParameterInput *pin, SimTime *tm,
     if ((tm == nullptr) ||
         ((ptype->output_params.dt >= 0.0) &&
          ((tm->ncycle == 0) || (tm->time >= ptype->output_params.next_time) ||
+          (tm->ncycle >= ptype->output_params.next_ncycle) ||
           (tm->time >= tm->tlim) || (signal == SignalHandler::OutputSignal::now) ||
           (signal == SignalHandler::OutputSignal::final) ||
           (signal == SignalHandler::OutputSignal::analysis &&
