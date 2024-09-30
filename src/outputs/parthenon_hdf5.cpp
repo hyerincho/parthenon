@@ -789,6 +789,9 @@ std::string PHDF5Output::GenerateFilename_(ParameterInput *pin, SimTime *tm,
     pin->SetInteger(output_params.block_name, "file_number", output_params.file_number);
     pin->SetReal(output_params.block_name, "next_time", output_params.next_time);
     pin->SetInteger(output_params.block_name, "next_ncycle", output_params.next_ncycle);
+  } else if (signal == SignalHandler::OutputSignal::analysis) {
+    output_params.file_number++;
+    pin->SetInteger(output_params.block_name, "file_number", output_params.file_number);
   }
   return filename;
 }

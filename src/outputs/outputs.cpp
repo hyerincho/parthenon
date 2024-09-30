@@ -427,7 +427,7 @@ void Outputs::MakeOutputs(Mesh *pm, ParameterInput *pin, SimTime *tm,
     if ((tm == nullptr) ||
         ((ptype->output_params.dt >= 0.0) &&
          ((tm->ncycle == 0) || (tm->time >= ptype->output_params.next_time) ||
-          (tm->ncycle >= ptype->output_params.next_ncycle) ||
+          ((ptype->output_params.dn > 0) && (tm->ncycle >= ptype->output_params.next_ncycle)) ||
           (tm->time >= tm->tlim) || (signal == SignalHandler::OutputSignal::now) ||
           (signal == SignalHandler::OutputSignal::final) ||
           (signal == SignalHandler::OutputSignal::analysis &&
